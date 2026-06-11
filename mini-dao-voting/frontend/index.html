@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>迷你 DAO 投票系統</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="brand">
+        <div class="logo">MVT</div>
+        <div>
+          <h1>迷你 DAO 投票系統</h1>
+          <p>迷你去中心化投票站</p>
+        </div>
+      </div>
+
+      <div class="wallet-panel">
+        <button id="connectWalletBtn" class="primary-btn">連接錢包</button>
+        <button id="adminPageBtn" class="ghost-btn" type="button">管理者</button>
+        <button id="addTokenBtn" class="ghost-btn" type="button">加入 MVT</button>
+        <div id="walletInfo" class="wallet-info hidden">
+          <span id="walletAddress">錢包：-</span>
+          <span id="networkName">網路：-</span>
+          <span id="tokenBalance">MVT 餘額：-</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-section">
+        <div class="hero-content">
+          <p class="eyebrow">代幣加權投票平台</p>
+          <p>
+            建立趣味投票活動，使用 MetaMask 連線，依照持有的 MVT 代幣數量投票，
+            並把結果永久寫入區塊鏈。
+          </p>
+        </div>
+        <div class="hero-stats glass-card">
+          <span class="label">合約狀態</span>
+          <strong id="contractStatus">等待合約設定</strong>
+          <small id="contractAddresses">請先完成部署設定</small>
+        </div>
+      </section>
+
+      <div class="section-heading">
+        <span>建立與代幣</span>
+        <small>建立新的投票活動，或把 MVT 分送給其他錢包。</small>
+      </div>
+
+      <section class="dashboard-grid">
+        <div class="glass-card create-card">
+          <div class="section-title">
+            <span>建立投票</span>
+            <small>建立新的鏈上投票</small>
+          </div>
+          <form id="createPollForm" class="form-stack">
+            <label>
+              標題
+              <input id="pollTitle" type="text" placeholder="下一次聚餐吃什麼？" required />
+            </label>
+            <label>
+              說明
+              <textarea id="pollDescription" rows="3" placeholder="請大家使用 MVT 投票" required></textarea>
+            </label>
+            <div class="options-grid">
+              <label>選項 1<input class="poll-option" type="text" placeholder="火鍋" required /></label>
+              <label>選項 2<input class="poll-option" type="text" placeholder="燒肉" required /></label>
+              <label>選項 3<input class="poll-option" type="text" placeholder="義大利麵" required /></label>
+              <label>選項 4<input class="poll-option" type="text" placeholder="韓式料理" required /></label>
+            </div>
+            <button class="primary-btn full-btn" type="submit">建立投票</button>
+          </form>
+        </div>
+
+        <div class="glass-card transfer-card">
+          <div class="section-title">
+            <span>代幣轉帳</span>
+            <small>發送測試代幣給其他錢包</small>
+          </div>
+          <form id="transferForm" class="form-stack">
+            <label>
+              接收地址
+              <input id="receiverAddress" type="text" placeholder="0x..." required />
+            </label>
+            <label>
+              數量
+              <input id="transferAmount" type="number" step="0.0001" min="0" placeholder="10" required />
+            </label>
+            <button class="secondary-btn full-btn" type="submit">發送代幣</button>
+          </form>
+        </div>
+      </section>
+
+      <div class="section-heading">
+        <span>參與投票</span>
+        <small>先選擇投票活動，再進行投票並查看即時結果。</small>
+      </div>
+
+      <section class="content-grid">
+        <div class="glass-card poll-list-card">
+          <div class="section-title row-title">
+            <div>
+              <span>投票列表</span>
+              <small>點擊卡片查看選項與結果</small>
+            </div>
+            <button id="refreshPollsBtn" class="ghost-btn" type="button">重新整理</button>
+          </div>
+          <div id="pollList" class="poll-list">
+            <div class="empty-state">尚未載入投票。請先連接錢包。</div>
+          </div>
+        </div>
+
+        <div class="glass-card vote-card">
+          <div class="section-title">
+            <span>投票</span>
+            <small id="selectedPollHint">選擇一個投票活動</small>
+          </div>
+          <div id="votePanel" class="vote-panel empty-state">請從左側投票列表選擇投票。</div>
+        </div>
+
+        <div class="glass-card result-card">
+          <div class="section-title">
+            <span>投票結果</span>
+            <small>即時鏈上結果</small>
+          </div>
+          <div id="resultPanel" class="result-panel empty-state">尚未選擇投票。</div>
+        </div>
+      </section>
+
+      <section id="adminSection" class="glass-card admin-card hidden">
+        <div class="section-title row-title">
+          <div>
+            <span>管理者頁面</span>
+            <small id="adminAuthStatus">請先連接錢包。</small>
+          </div>
+          <button id="adminCloseBtn" class="ghost-btn" type="button">關閉</button>
+        </div>
+
+        <div class="admin-grid">
+          <form id="mintForm" class="form-stack admin-panel">
+            <div class="section-title">
+              <span>發行代幣</span>
+              <small>驗證成功後可發行 MVT。</small>
+            </div>
+            <label>
+              接收地址
+              <input id="mintReceiver" type="text" placeholder="0x..." required />
+            </label>
+            <label>
+              發行數量
+              <input id="mintAmount" type="number" step="0.0001" min="0" placeholder="100" required />
+            </label>
+            <button class="primary-btn full-btn" type="submit">發行 MVT</button>
+          </form>
+
+          <div class="form-stack admin-panel">
+            <div class="section-title">
+              <span>隱藏已結束投票</span>
+              <small>只從網站列表隱藏，鏈上紀錄仍可查證。</small>
+            </div>
+            <label>
+              投票活動
+              <select id="adminDeletePollSelect"></select>
+            </label>
+            <button id="deletePollBtn" class="danger-btn full-btn" type="button">隱藏投票</button>
+          </div>
+
+          <div class="form-stack admin-panel records-panel">
+            <div class="section-title row-title">
+              <div>
+                <span>投票紀錄</span>
+                <small>查看投票者、選項與投票權重。</small>
+              </div>
+              <button id="refreshRecordsBtn" class="ghost-btn" type="button">更新紀錄</button>
+            </div>
+            <label>
+              投票活動
+              <select id="adminRecordPollSelect"></select>
+            </label>
+            <div id="voteRecordsList" class="record-list empty-state">請選擇投票活動。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <span id="loadingText">處理交易中...</span>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

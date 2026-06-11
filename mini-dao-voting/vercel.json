@@ -1,0 +1,6 @@
+{
+  "buildCommand": "node scripts/build-frontend.js",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": null
+}

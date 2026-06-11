@@ -1,0 +1,31 @@
+{
+  "name": "mini-dao-voting",
+  "version": "1.0.0",
+  "description": "Mini DAO Voting System with ERC-20 token-weighted on-chain voting.",
+  "main": "hardhat.config.js",
+  "scripts": {
+    "build": "node scripts/build-frontend.js",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia"
+  },
+  "keywords": [
+    "dao",
+    "voting",
+    "solidity",
+    "ethers",
+    "hardhat",
+    "erc20"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.10"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
