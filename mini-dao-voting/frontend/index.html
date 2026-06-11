@@ -65,12 +65,19 @@
               說明
               <textarea id="pollDescription" rows="3" placeholder="請大家使用 MVT 投票" required></textarea>
             </label>
-            <div class="options-grid">
+            <label>
+              截止時間
+              <input id="pollEndTime" type="datetime-local" required />
+            </label>
+            <label class="checkbox-row">
+              <input id="resultsVisibleBeforeClose" type="checkbox" checked />
+              投票期間公開即時結果
+            </label>
+            <div id="pollOptions" class="options-grid">
               <label>選項 1<input class="poll-option" type="text" placeholder="火鍋" required /></label>
               <label>選項 2<input class="poll-option" type="text" placeholder="燒肉" required /></label>
-              <label>選項 3<input class="poll-option" type="text" placeholder="義大利麵" required /></label>
-              <label>選項 4<input class="poll-option" type="text" placeholder="韓式料理" required /></label>
             </div>
+            <button id="addOptionBtn" class="ghost-btn full-btn" type="button">新增選項</button>
             <button class="primary-btn full-btn" type="submit">建立投票</button>
           </form>
         </div>
@@ -108,6 +115,12 @@
             </div>
             <button id="refreshPollsBtn" class="ghost-btn" type="button">重新整理</button>
           </div>
+          <div id="pollFilters" class="filter-tabs">
+            <button class="filter-btn active" type="button" data-filter="all">全部</button>
+            <button class="filter-btn" type="button" data-filter="open">進行中</button>
+            <button class="filter-btn" type="button" data-filter="closed">已結束</button>
+            <button class="filter-btn" type="button" data-filter="voted">我已投</button>
+          </div>
           <div id="pollList" class="poll-list">
             <div class="empty-state">尚未載入投票。請先連接錢包。</div>
           </div>
@@ -127,6 +140,14 @@
             <small>即時鏈上結果</small>
           </div>
           <div id="resultPanel" class="result-panel empty-state">尚未選擇投票。</div>
+        </div>
+
+        <div class="glass-card my-records-card">
+          <div class="section-title">
+            <span>我的投票紀錄</span>
+            <small>查看此錢包已投過的選項與 MVT 票數</small>
+          </div>
+          <div id="myVoteRecordsList" class="record-list empty-state">連接錢包後會顯示你的投票紀錄。</div>
         </div>
       </section>
 
@@ -158,14 +179,14 @@
 
           <div class="form-stack admin-panel">
             <div class="section-title">
-              <span>隱藏已結束投票</span>
-              <small>只從網站列表隱藏，鏈上紀錄仍可查證。</small>
+              <span>刪除已結束投票</span>
+              <small>送出鏈上交易，已刪除投票會從網站列表移除。</small>
             </div>
             <label>
               投票活動
               <select id="adminDeletePollSelect"></select>
             </label>
-            <button id="deletePollBtn" class="danger-btn full-btn" type="button">隱藏投票</button>
+            <button id="deletePollBtn" class="danger-btn full-btn" type="button">刪除投票</button>
           </div>
 
           <div class="form-stack admin-panel records-panel">

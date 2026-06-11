@@ -23,10 +23,13 @@ async function main() {
   console.log("MiniDAOVoting:", votingAddress);
 
   const sampleOptions = ["火鍋", "燒肉", "義大利麵", "韓式料理"];
+  const sampleEndTime = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
   const tx = await voting.createPoll(
     "下一次聚餐吃什麼？",
-    "請大家使用 MVT 投票，所有結果都會永久記錄在區塊鏈上。",
-    sampleOptions
+    "請大家使用 MVT 投票，可以把票數分配到多個選項。",
+    sampleOptions,
+    sampleEndTime,
+    true
   );
   await tx.wait();
   console.log("Sample poll created.");

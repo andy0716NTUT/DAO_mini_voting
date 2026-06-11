@@ -1,6 +1,6 @@
 window.MINI_DAO_CONFIG = {
   tokenAddress: "0x04391A26619a84AEb030a4dc19891B94B68aC2b3",
-  votingAddress: "0x788028881e71f3D86d5bB44fba98bb54E051e582",
+  votingAddress: "0xABE7beB762698b8bEb7334247f4570b1114fA283",
   networkName: "sepolia",
   chainId: 11155111,
   hiddenPollIds: [],

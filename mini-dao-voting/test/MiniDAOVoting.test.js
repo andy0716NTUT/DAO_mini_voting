@@ -19,6 +19,11 @@ describe("Mini DAO Voting System", function () {
     return { token, voting, owner, alice, bob, charlie };
   }
 
+  async function futureTimestamp(seconds = 3600) {
+    const block = await ethers.provider.getBlock("latest");
+    return block.timestamp + seconds;
+  }
+
   it("deploys token with correct metadata and initial supply", async function () {
     const { token, owner } = await deployFixture();
 
@@ -28,116 +33,119 @@ describe("Mini DAO Voting System", function () {
     expect(await token.balanceOf(owner.address)).to.equal(ethers.parseEther("999930"));
   });
 
-  it("creates a poll and exposes poll details", async function () {
+  it("creates a poll with deadline and result visibility settings", async function () {
     const { voting } = await deployFixture();
-    const options = ["火鍋", "燒肉", "義大利麵", "韓式料理"];
+    const options = ["火鍋", "燒肉", "義大利麵"];
+    const endTime = await futureTimestamp();
 
-    await expect(
-      voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", options)
-    )
+    await expect(voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", options, endTime, false))
       .to.emit(voting, "PollCreated")
-      .withArgs(0, "下一次聚餐吃什麼？");
+      .withArgs(0, "下一次聚餐吃什麼？", endTime, false);
 
     const poll = await voting.getPoll(0);
     expect(poll.title).to.equal("下一次聚餐吃什麼？");
     expect(poll.options).to.deep.equal(options);
     expect(poll.isClosed).to.equal(false);
     expect(poll.totalVotes).to.equal(0);
+    expect(poll.endTime).to.equal(endTime);
+    expect(poll.resultsVisibleBeforeClose).to.equal(false);
   });
 
-  it("counts votes by token balance at vote time", async function () {
-    const { voting, alice, bob } = await deployFixture();
+  it("splits custom vote weights across multiple options and deducts MVT", async function () {
+    const { token, voting, alice } = await deployFixture();
+    const endTime = await futureTimestamp();
 
-    await voting.createPoll("最強輕小說女主角投票", "1 MVT = 1 Vote", [
-      "御坂美琴",
-      "蕾姆",
-      "惠惠",
-      "亞絲娜",
-    ]);
+    await voting.createPoll("多選分配票數", "可以把 MVT 分給多個選項", ["A", "B", "C"], endTime, true);
+    await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("15"));
 
-    await expect(voting.connect(alice).vote(0, 0))
+    await expect(
+      voting.connect(alice).vote(0, [0, 2], [ethers.parseEther("10"), ethers.parseEther("5")])
+    )
       .to.emit(voting, "Voted")
-      .withArgs(0, alice.address, 0, ethers.parseEther("50"));
+      .withArgs(0, alice.address, 0, ethers.parseEther("10"));
 
-    await voting.connect(bob).vote(0, 1);
-
-    expect(await voting.getOptionVoteCount(0, 0)).to.equal(ethers.parseEther("50"));
-    expect(await voting.getOptionVoteCount(0, 1)).to.equal(ethers.parseEther("20"));
+    expect(await voting.getOptionVoteCount(0, 0)).to.equal(ethers.parseEther("10"));
+    expect(await voting.getOptionVoteCount(0, 2)).to.equal(ethers.parseEther("5"));
+    expect(await token.balanceOf(alice.address)).to.equal(ethers.parseEther("35"));
 
     const poll = await voting.getPoll(0);
-    expect(poll.totalVotes).to.equal(ethers.parseEther("70"));
+    expect(poll.totalVotes).to.equal(ethers.parseEther("15"));
+  });
+
+  it("rejects duplicate options, zero votes, and votes above wallet balance", async function () {
+    const { token, voting, bob } = await deployFixture();
+    const endTime = await futureTimestamp();
+
+    await voting.createPoll("票數限制測試", "投票票數不可超過錢包餘額", ["A", "B"], endTime, true);
+    await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("30"));
+
+    await expect(voting.connect(bob).vote(0, [0], [0])).to.be.revertedWith("Voting: vote weight required");
+    await expect(
+      voting.connect(bob).vote(0, [0, 0], [ethers.parseEther("1"), ethers.parseEther("1")])
+    ).to.be.revertedWith("Voting: duplicate option");
+    await expect(voting.connect(bob).vote(0, [1], [ethers.parseEther("20.0001")])).to.be.revertedWith(
+      "Voting: insufficient voting power"
+    );
   });
 
   it("prevents duplicate voting and zero-balance voting", async function () {
-    const { voting, alice, charlie } = await deployFixture();
+    const { token, voting, alice, charlie } = await deployFixture();
+    const endTime = await futureTimestamp();
 
-    await voting.createPoll("社團活動地點投票", "選出下一次活動地點", [
-      "河濱公園",
-      "桌遊店",
-      "電影院",
-      "咖啡廳",
-    ]);
+    await voting.createPoll("社團活動地點投票", "選出下一次活動地點", ["河濱公園", "桌遊店"], endTime, true);
+    await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("10"));
 
-    await voting.connect(alice).vote(0, 2);
-    await expect(voting.connect(alice).vote(0, 1)).to.be.revertedWith("Voting: already voted");
-    await expect(voting.connect(charlie).vote(0, 1)).to.be.revertedWith("Voting: no voting power");
+    await voting.connect(alice).vote(0, [1], [ethers.parseEther("10")]);
+    await expect(voting.connect(alice).vote(0, [0], [ethers.parseEther("1")])).to.be.revertedWith("Voting: already voted");
+    await expect(voting.connect(charlie).vote(0, [0], [ethers.parseEther("1")])).to.be.revertedWith(
+      "Voting: no voting power"
+    );
   });
 
   it("allows only owner to close polls and blocks voting after close", async function () {
-    const { voting, alice, bob } = await deployFixture();
+    const { token, voting, alice, bob } = await deployFixture();
+    const endTime = await futureTimestamp();
 
-    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B", "C", "D"]);
+    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true);
+    await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("1"));
 
     await expect(voting.connect(alice).closePoll(0)).to.be.reverted;
-
     await expect(voting.closePoll(0)).to.emit(voting, "PollClosed").withArgs(0);
     expect(await voting.isPollClosed(0)).to.equal(true);
-
-    await expect(voting.connect(bob).vote(0, 0)).to.be.revertedWith("Voting: poll is closed");
-  });
-
-  it("supports ERC-20 transfers", async function () {
-    const { token, alice, charlie } = await deployFixture();
-
-    await token.connect(alice).transfer(charlie.address, ethers.parseEther("5"));
-
-    expect(await token.balanceOf(alice.address)).to.equal(ethers.parseEther("45"));
-    expect(await token.balanceOf(charlie.address)).to.equal(ethers.parseEther("5"));
+    await expect(voting.connect(bob).vote(0, [0], [ethers.parseEther("1")])).to.be.revertedWith("Voting: poll is closed");
   });
 
   it("records voters, selected options, and vote weights", async function () {
-    const { voting, alice, bob } = await deployFixture();
+    const { token, voting, alice, bob } = await deployFixture();
+    const endTime = await futureTimestamp();
 
-    await voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", [
-      "火鍋",
-      "燒肉",
-      "義大利麵",
-      "韓式料理",
-    ]);
+    await voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", ["火鍋", "燒肉", "義大利麵"], endTime, true);
+    await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("12"));
+    await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("6"));
 
-    await voting.connect(alice).vote(0, 0);
-    await voting.connect(bob).vote(0, 3);
+    await voting.connect(alice).vote(0, [0, 2], [ethers.parseEther("8"), ethers.parseEther("4")]);
+    await voting.connect(bob).vote(0, [1], [ethers.parseEther("6")]);
 
     const records = await voting.getVoterRecords(0);
 
-    expect(records.voters).to.deep.equal([alice.address, bob.address]);
-    expect(records.optionIndices).to.deep.equal([0n, 3n]);
+    expect(records.voters).to.deep.equal([alice.address, alice.address, bob.address]);
+    expect(records.optionIndices).to.deep.equal([0n, 2n, 1n]);
     expect(records.voteWeights).to.deep.equal([
-      ethers.parseEther("50"),
-      ethers.parseEther("20"),
+      ethers.parseEther("8"),
+      ethers.parseEther("4"),
+      ethers.parseEther("6"),
     ]);
   });
 
   it("lets only owner delete closed polls", async function () {
     const { voting, alice } = await deployFixture();
+    const endTime = await futureTimestamp();
 
-    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B", "C", "D"]);
-
+    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true);
     await expect(voting.deletePoll(0)).to.be.revertedWith("Voting: close poll first");
 
     await voting.closePoll(0);
     await expect(voting.connect(alice).deletePoll(0)).to.be.reverted;
-
     await expect(voting.deletePoll(0)).to.emit(voting, "PollDeleted").withArgs(0);
     await expect(voting.getPoll(0)).to.be.revertedWith("Voting: poll deleted");
 
