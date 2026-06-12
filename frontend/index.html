@@ -69,6 +69,16 @@
               截止時間
               <input id="pollEndTime" type="datetime-local" required />
             </label>
+            <div class="options-grid">
+              <label>
+                最低投票限制 (MVT)
+                <input id="pollMinVote" type="number" step="0.0001" min="0" value="0" placeholder="0 表示無限制" required />
+              </label>
+              <label>
+                最高投票限制 (MVT)
+                <input id="pollMaxVote" type="number" step="0.0001" min="0" value="0" placeholder="0 表示無限制" required />
+              </label>
+            </div>
             <label class="checkbox-row">
               <input id="resultsVisibleBeforeClose" type="checkbox" checked />
               投票期間公開即時結果

@@ -38,9 +38,9 @@ describe("Mini DAO Voting System", function () {
     const options = ["火鍋", "燒肉", "義大利麵"];
     const endTime = await futureTimestamp();
 
-    await expect(voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", options, endTime, false))
+    await expect(voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", options, endTime, false, 0, 0))
       .to.emit(voting, "PollCreated")
-      .withArgs(0, "下一次聚餐吃什麼？", endTime, false);
+      .withArgs(0, "下一次聚餐吃什麼？", endTime, false, 0, 0);
 
     const poll = await voting.getPoll(0);
     expect(poll.title).to.equal("下一次聚餐吃什麼？");
@@ -49,13 +49,15 @@ describe("Mini DAO Voting System", function () {
     expect(poll.totalVotes).to.equal(0);
     expect(poll.endTime).to.equal(endTime);
     expect(poll.resultsVisibleBeforeClose).to.equal(false);
+    expect(poll.minVote).to.equal(0);
+    expect(poll.maxVote).to.equal(0);
   });
 
   it("splits custom vote weights across multiple options and deducts MVT", async function () {
     const { token, voting, alice } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("多選分配票數", "可以把 MVT 分給多個選項", ["A", "B", "C"], endTime, true);
+    await voting.createPoll("多選分配票數", "可以把 MVT 分給多個選項", ["A", "B", "C"], endTime, true, 0, 0);
     await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("15"));
 
     await expect(
@@ -76,7 +78,7 @@ describe("Mini DAO Voting System", function () {
     const { token, voting, bob } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("票數限制測試", "投票票數不可超過錢包餘額", ["A", "B"], endTime, true);
+    await voting.createPoll("票數限制測試", "投票票數不可超過錢包餘額", ["A", "B"], endTime, true, 0, 0);
     await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("30"));
 
     await expect(voting.connect(bob).vote(0, [0], [0])).to.be.revertedWith("Voting: vote weight required");
@@ -92,7 +94,7 @@ describe("Mini DAO Voting System", function () {
     const { token, voting, alice, charlie } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("社團活動地點投票", "選出下一次活動地點", ["河濱公園", "桌遊店"], endTime, true);
+    await voting.createPoll("社團活動地點投票", "選出下一次活動地點", ["河濱公園", "桌遊店"], endTime, true, 0, 0);
     await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("10"));
 
     await voting.connect(alice).vote(0, [1], [ethers.parseEther("10")]);
@@ -106,7 +108,7 @@ describe("Mini DAO Voting System", function () {
     const { token, voting, alice, bob } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true);
+    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true, 0, 0);
     await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("1"));
 
     await expect(voting.connect(alice).closePoll(0)).to.be.reverted;
@@ -119,7 +121,7 @@ describe("Mini DAO Voting System", function () {
     const { token, voting, alice, bob } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", ["火鍋", "燒肉", "義大利麵"], endTime, true);
+    await voting.createPoll("下一次聚餐吃什麼？", "請大家使用 MVT 投票", ["火鍋", "燒肉", "義大利麵"], endTime, true, 0, 0);
     await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("12"));
     await token.connect(bob).approve(await voting.getAddress(), ethers.parseEther("6"));
 
@@ -141,7 +143,7 @@ describe("Mini DAO Voting System", function () {
     const { voting, alice } = await deployFixture();
     const endTime = await futureTimestamp();
 
-    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true);
+    await voting.createPoll("班級趣味票選", "本週主題", ["A", "B"], endTime, true, 0, 0);
     await expect(voting.deletePoll(0)).to.be.revertedWith("Voting: close poll first");
 
     await voting.closePoll(0);
@@ -151,5 +153,61 @@ describe("Mini DAO Voting System", function () {
 
     const allPolls = await voting.getAllPolls();
     expect(allPolls.ids.length).to.equal(0);
+  });
+
+  it("enforces minimum and maximum vote weight limits", async function () {
+    const { token, voting, alice } = await deployFixture();
+    const endTime = await futureTimestamp();
+
+    await voting.createPoll(
+      "限額投票測試",
+      "限制最低 10 最大 30 MVT",
+      ["A", "B"],
+      endTime,
+      true,
+      ethers.parseEther("10"),
+      ethers.parseEther("30")
+    );
+
+    const poll = await voting.getPoll(0);
+    expect(poll.minVote).to.equal(ethers.parseEther("10"));
+    expect(poll.maxVote).to.equal(ethers.parseEther("30"));
+
+    await token.connect(alice).approve(await voting.getAddress(), ethers.parseEther("50"));
+
+    // Case 1: Vote below minimum (9 MVT) - should revert
+    await expect(
+      voting.connect(alice).vote(0, [0], [ethers.parseEther("9")])
+    ).to.be.revertedWith("Voting: vote weight below minimum limit");
+
+    // Case 2: Vote above maximum (31 MVT) - should revert
+    await expect(
+      voting.connect(alice).vote(0, [0, 1], [ethers.parseEther("20"), ethers.parseEther("11")])
+    ).to.be.revertedWith("Voting: vote weight exceeds maximum limit");
+
+    // Case 3: Valid vote (15 MVT) - should succeed
+    await expect(
+      voting.connect(alice).vote(0, [0, 1], [ethers.parseEther("10"), ethers.parseEther("5")])
+    ).to.emit(voting, "Voted");
+
+    const updatedPoll = await voting.getPoll(0);
+    expect(updatedPoll.totalVotes).to.equal(ethers.parseEther("15"));
+  });
+
+  it("reverts if creating a poll with maxVote < minVote when maxVote > 0", async function () {
+    const { voting } = await deployFixture();
+    const endTime = await futureTimestamp();
+
+    await expect(
+      voting.createPoll(
+        "無效限制測試",
+        "最高小於最低",
+        ["A", "B"],
+        endTime,
+        true,
+        ethers.parseEther("20"),
+        ethers.parseEther("10")
+      )
+    ).to.be.revertedWith("Voting: invalid min/max vote limits");
   });
 });
