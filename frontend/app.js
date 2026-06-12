@@ -15,14 +15,14 @@ const VOTING_ABI = [
   { inputs: [], name: "owner", outputs: [{ type: "address" }], stateMutability: "view", type: "function" },
   { inputs: [], name: "pollCount", outputs: [{ type: "uint256" }], stateMutability: "view", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }, { name: "voter", type: "address" }], name: "hasVoted", outputs: [{ type: "bool" }], stateMutability: "view", type: "function" },
-  { inputs: [{ name: "title", type: "string" }, { name: "description", type: "string" }, { name: "options", type: "string[]" }, { name: "endTime", type: "uint256" }, { name: "resultsVisibleBeforeClose", type: "bool" }], name: "createPoll", outputs: [{ type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ name: "title", type: "string" }, { name: "description", type: "string" }, { name: "options", type: "string[]" }, { name: "endTime", type: "uint256" }, { name: "resultsVisibleBeforeClose", type: "bool" }, { name: "minVote", type: "uint256" }, { name: "maxVote", type: "uint256" }], name: "createPoll", outputs: [{ type: "uint256" }], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }, { name: "optionIndices", type: "uint256[]" }, { name: "voteWeights", type: "uint256[]" }], name: "vote", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }], name: "closePoll", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }], name: "deletePoll", outputs: [], stateMutability: "nonpayable", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }], name: "isPollClosed", outputs: [{ type: "bool" }], stateMutability: "view", type: "function" },
-  { inputs: [{ name: "pollId", type: "uint256" }], name: "getPoll", outputs: [{ name: "id", type: "uint256" }, { name: "title", type: "string" }, { name: "description", type: "string" }, { name: "options", type: "string[]" }, { name: "voteCounts", type: "uint256[]" }, { name: "isClosed", type: "bool" }, { name: "totalVotes", type: "uint256" }, { name: "createdAt", type: "uint256" }, { name: "endTime", type: "uint256" }, { name: "resultsVisibleBeforeClose", type: "bool" }], stateMutability: "view", type: "function" },
+  { inputs: [{ name: "pollId", type: "uint256" }], name: "getPoll", outputs: [{ name: "id", type: "uint256" }, { name: "title", type: "string" }, { name: "description", type: "string" }, { name: "options", type: "string[]" }, { name: "voteCounts", type: "uint256[]" }, { name: "isClosed", type: "bool" }, { name: "totalVotes", type: "uint256" }, { name: "createdAt", type: "uint256" }, { name: "endTime", type: "uint256" }, { name: "resultsVisibleBeforeClose", type: "bool" }, { name: "minVote", type: "uint256" }, { name: "maxVote", type: "uint256" }], stateMutability: "view", type: "function" },
   { inputs: [{ name: "pollId", type: "uint256" }], name: "getVoterRecords", outputs: [{ name: "voters", type: "address[]" }, { name: "optionIndices", type: "uint256[]" }, { name: "voteWeights", type: "uint256[]" }], stateMutability: "view", type: "function" },
-  { anonymous: false, inputs: [{ indexed: true, name: "pollId", type: "uint256" }, { indexed: false, name: "title", type: "string" }, { indexed: false, name: "endTime", type: "uint256" }, { indexed: false, name: "resultsVisibleBeforeClose", type: "bool" }], name: "PollCreated", type: "event" },
+  { anonymous: false, inputs: [{ indexed: true, name: "pollId", type: "uint256" }, { indexed: false, name: "title", type: "string" }, { indexed: false, name: "endTime", type: "uint256" }, { indexed: false, name: "resultsVisibleBeforeClose", type: "bool" }, { indexed: false, name: "minVote", type: "uint256" }, { indexed: false, name: "maxVote", type: "uint256" }], name: "PollCreated", type: "event" },
   { anonymous: false, inputs: [{ indexed: true, name: "pollId", type: "uint256" }, { indexed: true, name: "voter", type: "address" }, { indexed: false, name: "optionIndex", type: "uint256" }, { indexed: false, name: "voteWeight", type: "uint256" }], name: "Voted", type: "event" },
   { anonymous: false, inputs: [{ indexed: true, name: "pollId", type: "uint256" }], name: "PollClosed", type: "event" },
   { anonymous: false, inputs: [{ indexed: true, name: "pollId", type: "uint256" }], name: "PollDeleted", type: "event" }
@@ -58,6 +58,8 @@ const dom = {
   contractAddresses: document.getElementById("contractAddresses"),
   createPollForm: document.getElementById("createPollForm"),
   pollEndTime: document.getElementById("pollEndTime"),
+  pollMinVote: document.getElementById("pollMinVote"),
+  pollMaxVote: document.getElementById("pollMaxVote"),
   resultsVisibleBeforeClose: document.getElementById("resultsVisibleBeforeClose"),
   pollOptions: document.getElementById("pollOptions"),
   addOptionBtn: document.getElementById("addOptionBtn"),
@@ -276,6 +278,8 @@ function normalizePoll(poll) {
     createdAt: Number(poll[7] || 0),
     endTime: Number(poll[8] || 0),
     resultsVisibleBeforeClose: Boolean(poll[9]),
+    minVote: poll[10],
+    maxVote: poll[11],
     hasCurrentUserVoted: false
   };
 }
@@ -351,7 +355,16 @@ async function selectPoll(pollId) {
 
 function renderVotePanel(poll, alreadyVoted) {
   const disabled = poll.isClosed || alreadyVoted;
-  const reason = poll.isClosed ? "投票已結束" : alreadyVoted ? "你已經投過票" : "可分配 MVT 到一個或多個選項";
+  
+  let limitDesc = "可分配 MVT 到一個或多個選項";
+  if (poll.minVote > 0n || poll.maxVote > 0n) {
+    const minText = poll.minVote > 0n ? `最低限制 ${formatToken(poll.minVote)} MVT` : "";
+    const maxText = poll.maxVote > 0n ? `最高限制 ${formatToken(poll.maxVote)} MVT` : "";
+    const limits = [minText, maxText].filter(Boolean).join("，");
+    limitDesc = `請分配 MVT 到一個或多個選項（此投票設有金額限制：${limits}）`;
+  }
+
+  const reason = poll.isClosed ? "投票已結束" : alreadyVoted ? "你已經投過票" : limitDesc;
   const closeButton = isOwner()
     ? `<button class="danger-btn full-btn" type="button" id="closePollBtn" ${poll.isClosed ? "disabled" : ""}>關閉投票</button>`
     : "";
@@ -430,6 +443,11 @@ async function createPoll(event) {
     const endTime = Math.floor(new Date(dom.pollEndTime.value).getTime() / 1000);
     const resultsVisibleBeforeClose = dom.resultsVisibleBeforeClose.checked;
 
+    const minVoteVal = dom.pollMinVote ? dom.pollMinVote.value.trim() : "0";
+    const maxVoteVal = dom.pollMaxVote ? dom.pollMaxVote.value.trim() : "0";
+    const minVote = ethers.parseEther(minVoteVal || "0");
+    const maxVote = ethers.parseEther(maxVoteVal || "0");
+
     if (options.length < 2) {
       showToast("請至少填寫 2 個選項。", "warning");
       return;
@@ -445,8 +463,13 @@ async function createPoll(event) {
       return;
     }
 
+    if (maxVote > 0n && maxVote < minVote) {
+      showToast("最高投票限制不能小於最低限制。", "warning");
+      return;
+    }
+
     showLoading("建立投票交易送出中...");
-    const tx = await state.voting.createPoll(title, description, options, endTime, resultsVisibleBeforeClose);
+    const tx = await state.voting.createPoll(title, description, options, endTime, resultsVisibleBeforeClose, minVote, maxVote);
     showToast(`交易已送出：${shortHash(tx.hash)}`, "success");
 
     showLoading("等待區塊確認...");
@@ -485,6 +508,18 @@ async function vote() {
     if (totalWeight > balance) {
       showToast(`投票票數不能超過你的 MVT 餘額：${formatToken(balance)} MVT。`, "warning");
       return;
+    }
+
+    const poll = state.polls.find((item) => item.id === state.selectedPollId);
+    if (poll) {
+      if (poll.minVote > 0n && totalWeight < poll.minVote) {
+        showToast(`投票總票數低於最低限制：${formatToken(poll.minVote)} MVT。`, "warning");
+        return;
+      }
+      if (poll.maxVote > 0n && totalWeight > poll.maxVote) {
+        showToast(`投票總票數高於最高限制：${formatToken(poll.maxVote)} MVT。`, "warning");
+        return;
+      }
     }
 
     const allowance = await state.token.allowance(state.account, config.votingAddress);
@@ -591,10 +626,12 @@ async function transferToken(event) {
   }
 }
 
+// 開啟管理者介面並載入管理者相關選單與投票記錄
 async function openAdminPage() {
   try {
     ensureConnected();
 
+    // 再次確認當前錢包帳戶是否為合約所有者 (Owner)
     if (!isOwner()) {
       dom.adminSection.classList.add("hidden");
       showToast("沒有權限。", "error");
@@ -605,12 +642,14 @@ async function openAdminPage() {
     updateAdminStatus();
     updateAdminPollSelectors();
     await loadAdminVoteRecords();
+    // 平滑捲動畫面至管理者面板
     dom.adminSection.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     showToast(toFriendlyError(error), "error");
   }
 }
 
+// 在管理者面板更新目前的驗證狀態文字
 function updateAdminStatus() {
   if (!state.account) {
     dom.adminAuthStatus.textContent = "請先連接錢包。";
@@ -622,6 +661,7 @@ function updateAdminStatus() {
     : "驗證失敗。";
 }
 
+// 更新管理者下拉式選單 (可用於刪除選單與查詢記錄選單)
 function updateAdminPollSelectors() {
   const recordOptions = state.polls
     .map((poll) => `<option value="${poll.id}">#${poll.id} ${escapeHtml(poll.title)}</option>`)
@@ -637,6 +677,7 @@ function updateAdminPollSelectors() {
   dom.refreshRecordsBtn.disabled = !recordOptions;
 }
 
+// 發行代幣 (Mint)：向指定地址鑄造新的 MVT 代幣 (限合約 Owner 呼叫)
 async function mintTokens(event) {
   event.preventDefault();
 
@@ -644,6 +685,7 @@ async function mintTokens(event) {
     ensureConnected();
     ensureAdmin();
 
+    // 檢查代幣合約的擁有者是否與當前錢包一致
     if (state.tokenOwner && state.tokenOwner.toLowerCase() !== state.account.toLowerCase()) {
       showToast("沒有權限。", "error");
       return;
@@ -663,6 +705,7 @@ async function mintTokens(event) {
     }
 
     showLoading("發行 MVT 交易送出中...");
+    // 呼叫 ERC-20 代幣合約進行 mint
     const tx = await state.token.mint(receiver, ethers.parseEther(amount));
     showToast(`發行交易已送出：${shortHash(tx.hash)}`, "success");
 
@@ -679,6 +722,7 @@ async function mintTokens(event) {
   }
 }
 
+// 軟刪除已結束投票：標記 isDeleted，從前台列表中過濾掉 (限合約 Owner 呼叫)
 async function deleteClosedPoll() {
   try {
     ensureConnected();
@@ -712,10 +756,12 @@ async function deleteClosedPoll() {
   }
 }
 
+// 渲染「我的投票記錄」區塊，向合約查詢當前錢包的歷史投票並列表
 async function renderMyVoteRecords() {
   if (!state.voting || !state.account) return;
 
   const rows = [];
+  // 遍歷所有載入的投票，篩選出當前帳號投過的
   for (const poll of state.polls) {
     if (!poll.hasCurrentUserVoted) continue;
     const records = await getVoteRecordsFromContract(poll.id).catch(() => []);
@@ -747,6 +793,7 @@ async function renderMyVoteRecords() {
     .join("");
 }
 
+// 管理者功能：載入並在列表渲染所選投票活動的所有選民投票記錄明細
 async function loadAdminVoteRecords() {
   if (!state.voting || dom.adminSection.classList.contains("hidden")) return;
 
@@ -766,8 +813,10 @@ async function loadAdminVoteRecords() {
 
   let records = [];
   try {
+    // 優先從合約 getter 函數載入明細
     records = await getVoteRecordsFromContract(pollId);
   } catch {
+    // 若節點不支援直接呼叫，則退回透過 event log 查詢
     records = await getVoteRecordsFromEvents(pollId);
   }
 
@@ -792,6 +841,7 @@ async function loadAdminVoteRecords() {
     .join("");
 }
 
+// 從投票合約調用 getVoterRecords 取回所有投票清單
 async function getVoteRecordsFromContract(pollId) {
   const records = await state.voting.getVoterRecords(pollId);
   return records.voters.map((voter, index) => ({
@@ -801,6 +851,7 @@ async function getVoteRecordsFromContract(pollId) {
   }));
 }
 
+// 透過以太坊節點 queryFilter 過濾 Voted 事件歷史，拼裝出投票明細 (當合約陣列太長時的備用手段)
 async function getVoteRecordsFromEvents(pollId) {
   const filter = state.voting.filters.Voted(pollId);
   const events = await state.voting.queryFilter(filter, 0, "latest");
@@ -811,6 +862,7 @@ async function getVoteRecordsFromEvents(pollId) {
   }));
 }
 
+// 調用 MetaMask 的 wallet_watchAsset 介面，將 MVT 治理代幣的圖標、符號與地址加入到錢包中
 async function addTokenToMetaMask() {
   try {
     if (!window.ethereum) {
@@ -828,6 +880,7 @@ async function addTokenToMetaMask() {
       return;
     }
 
+    // 發送錢包加入代幣請求
     const added = await window.ethereum.request({
       method: "wallet_watchAsset",
       params: {
@@ -846,12 +899,14 @@ async function addTokenToMetaMask() {
   }
 }
 
+// 設定建立投票頁面的截止時間預設值 (明天此刻)
 function setDefaultPollEndTime() {
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   tomorrow.setSeconds(0, 0);
   dom.pollEndTime.value = toDateTimeLocalValue(tomorrow);
 }
 
+// 在 DOM 中動態渲染建立投票所需的選項輸入欄位
 function renderOptionInputs(values = []) {
   const normalizedValues = values.length >= 2 ? values : ["", ""];
 
@@ -873,6 +928,7 @@ function renderOptionInputs(values = []) {
   dom.addOptionBtn.disabled = normalizedValues.length >= 10;
 }
 
+// 新增一個選項輸入欄位
 function addPollOptionInput() {
   const values = getPollOptionValues(false);
   if (values.length >= 10) {
@@ -883,6 +939,7 @@ function addPollOptionInput() {
   renderOptionInputs([...values, ""]);
 }
 
+// 移除一個選項輸入欄位
 function removePollOptionInput(indexToRemove) {
   const values = getPollOptionValues(false);
   if (values.length <= 2) {
@@ -893,6 +950,7 @@ function removePollOptionInput(indexToRemove) {
   renderOptionInputs(values.filter((_, index) => index !== indexToRemove));
 }
 
+// 獲取目前輸入的所有選項字串陣列
 function getPollOptionValues(trimEmpty = true) {
   const values = [...document.querySelectorAll(".poll-option")].map((input) => input.value.trim());
   return trimEmpty ? values.filter(Boolean) : values;
@@ -1032,6 +1090,9 @@ function toFriendlyError(error) {
   if (raw.includes("close poll first")) return "請先關閉投票或等待截止，再刪除。";
   if (raw.includes("poll deleted")) return "這個投票已被刪除。";
   if (raw.includes("Ownable")) return "沒有權限。";
+  if (raw.includes("vote weight below minimum limit")) return "投票總票數低於此投票規定的最低票數限制。";
+  if (raw.includes("vote weight exceeds maximum limit")) return "投票總票數已超過此投票規定的最高票數限制。";
+  if (raw.includes("invalid min/max vote limits")) return "最高投票限制不能低於最低投票限制。";
   if (raw.includes("WRONG_NETWORK")) {
     const [, currentChainId, expectedChainId] = raw.match(/WRONG_NETWORK:(\d+):(\d+)/) || [];
     return `MetaMask 目前 Chain ID 是 ${currentChainId || "未知"}，但此網站設定需要 Chain ID ${expectedChainId || config.chainId}。`;

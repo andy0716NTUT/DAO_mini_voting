@@ -29,7 +29,9 @@ async function main() {
     "請大家使用 MVT 投票，可以把票數分配到多個選項。",
     sampleOptions,
     sampleEndTime,
-    true
+    true,
+    0,
+    0
   );
   await tx.wait();
   console.log("Sample poll created.");
